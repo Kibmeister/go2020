@@ -7,6 +7,7 @@ var peers []net.Conn
 var mutex sync.Mutex
 
 var messagesSent =  make(map[string]bool)
+var c = make(chan string)
 
  // TODO: populate an empty set with the messages it has sent 
  // TODO: checks strings from other connections or inputed,  if it has already been sent. if so, dont do anything.
@@ -27,9 +28,9 @@ func handleConnection(conn net.Conn) {
 			fmt.Println("Ending session with " + otherEnd)
 			return
 		}
-		if !messagesSent[msg] {
-			fmt.Print(string(msg))
-		}
+
+		fmt.Print(string(msg))
+		c <- msg
 	}
 }
 
@@ -37,17 +38,18 @@ func userInput(){
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		msg, _ := reader.ReadString('\n')
-
-		mutex.Lock() 
-		for _, peer := range peers {
-			if !messagesSent[msg] {
-				peer.Write([]byte(msg))
-			}
-		} 
-		messagesSent[msg] = true
-		mutex.Unlock()
+		c <- msg
 	}
-	
+}
+
+func writeMessage(){
+	msg := <- c
+	for _, peer := range peers {
+		if !messagesSent[msg] {
+			peer.Write([]byte(msg))
+			messagesSent[msg] = true
+		} 
+	} 
 }
 
 func main() {
@@ -63,6 +65,8 @@ func main() {
 	conn, err := net.Dial("tcp", peerAddr)
 
 	go userInput()
+	
+	go writeMessage()
 
 	// Checks if there is an error when dialing the conncection
 	if err != nil {
