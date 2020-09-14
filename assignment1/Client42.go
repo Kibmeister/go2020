@@ -17,8 +17,6 @@ var messagesSent =  make(map[string]bool)
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	peers = append(peers, conn)
-
 	reader := bufio.NewReader(conn)
 
 	otherEnd := conn.RemoteAddr().String()
@@ -31,7 +29,6 @@ func handleConnection(conn net.Conn) {
 		}
 		if !messagesSent[msg] {
 			fmt.Print(string(msg))
-			messagesSent[msg] = true
 		}
 	}
 }
@@ -40,12 +37,14 @@ func userInput(){
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		msg, _ := reader.ReadString('\n')
+
 		mutex.Lock() 
 		for _, peer := range peers {
 			if !messagesSent[msg] {
 				peer.Write([]byte(msg))
 			}
 		} 
+		messagesSent[msg] = true
 		mutex.Unlock()
 	}
 	
@@ -70,6 +69,7 @@ func main() {
 		fmt.Println("The peer has not been found")
 		fmt.Println("Creating network...")
 	} else {
+		peers = append(peers, conn)
 		go handleConnection(conn)
 	}
 
@@ -83,6 +83,7 @@ func main() {
 	for {
 		conn, _ := ln.Accept()
 		fmt.Println("Got a connection...")
+		peers = append(peers, conn)
 		go handleConnection(conn)
 	}
 }
