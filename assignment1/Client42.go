@@ -31,6 +31,7 @@ func handleConnection(conn net.Conn) {
 		}
 		if !messagesSent[msg] {
 			fmt.Print(string(msg))
+			messagesSent[msg] = true
 		}
 	}
 }
@@ -45,7 +46,6 @@ func userInput(){
 				peer.Write([]byte(msg))
 			}
 		} 
-		messagesSent[msg] = true
 		mutex.Unlock()
 	}
 	
