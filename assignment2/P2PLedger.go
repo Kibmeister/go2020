@@ -2,12 +2,6 @@ package main
 
 import ( "net" ; "fmt" ; "bufio" ; "strings" ; "os" ; "sync" )
 
-var peers []net.Conn
-var mutex sync.Mutex
-
-var messagesSent =  make(map[string]bool)
-var c = make(chan string)
-
 // TODO: remove the sting and brodcast functionlity 
 // TODO: 
 // TODO: implement a Ledger
@@ -18,11 +12,23 @@ var c = make(chan string)
 // TODO: 											: to clients that join later. 
 
 
-func handleConnection(conn net.Conn) { 
+var peers []net.Conn
+
+var mutex sync.Mutex
+
+var messagesSent =  make(map[string]bool)
+
+
+func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
+	// adding conn to the networklist
+	peers = append(peers, conn)
+
+	// reads on incomming
 	reader := bufio.NewReader(conn)
 
+	// other end of conn
 	otherEnd := conn.RemoteAddr().String()
 
   for {
@@ -31,28 +37,35 @@ func handleConnection(conn net.Conn) {
 			fmt.Println("Ending session with " + otherEnd)
 			return
 		}
-
-		fmt.Print(string(msg))
-		c <- msg
+		if !messagesSent[msg] {
+			fmt.Print(string(msg))
+			go userOutput(msg)
+			messagesSent[msg] = true
+		}
 	}
 }
 
+// reads input from commandline
 func userInput(){
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		msg, _ := reader.ReadString('\n')
-		c <- msg
+		mutex.Lock() 
+		for _, peer := range peers {
+			if !messagesSent[msg] {
+				peer.Write([]byte(msg))
+			}
+		}
+		messagesSent[msg] = true
+		mutex.Unlock()
 	}
 }
 
-func writeMessage(){
-	msg := <- c
+// forwards message if not send
+func userOutput(msg string) {
 	for _, peer := range peers {
-		if !messagesSent[msg] {
-			peer.Write([]byte(msg))
-			messagesSent[msg] = true
-		} 
-	} 
+		peer.Write([]byte(msg))
+	}
 }
 
 func main() {
@@ -68,15 +81,12 @@ func main() {
 	conn, err := net.Dial("tcp", peerAddr)
 
 	go userInput()
-	
-	go writeMessage()
 
 	// Checks if there is an error when dialing the conncection
 	if err != nil {
 		fmt.Println("The peer has not been found")
 		fmt.Println("Creating network...")
 	} else {
-		peers = append(peers, conn)
 		go handleConnection(conn)
 	}
 
@@ -90,7 +100,6 @@ func main() {
 	for {
 		conn, _ := ln.Accept()
 		fmt.Println("Got a connection...")
-		peers = append(peers, conn)
 		go handleConnection(conn)
 	}
 }
