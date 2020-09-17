@@ -8,12 +8,17 @@ var mutex sync.Mutex
 var messagesSent =  make(map[string]bool)
 var c = make(chan string)
 
-
+// TODO: remove the sting and brodcast functionlity 
+// TODO: 
 // TODO: implement a Ledger
-// TODO: implement a Transctioption action 
+// TODO: implement a Tansaction functionallity so clients can make transactions
+// TODO: system should ensure eventual consistency 
+// TODO: Work in two settings : all the peers connect and after a long break make tansactions
+// TODO: 											: for late comers, make a list of all the transactions and forward them
+// TODO: 											: to clients that join later. 
 
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn) { 
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)

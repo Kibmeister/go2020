@@ -8,7 +8,7 @@ var mutex sync.Mutex
 var messagesSent =  make(map[string]bool)
 var c = make(chan string)
 
-
+// TODO: remove the sting and 
 // TODO: implement a Ledger
 // TODO: implement a Transctioption action 
 
