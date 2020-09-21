@@ -1,6 +1,6 @@
 package main
 
-import ( "net" ; "fmt" ; "bufio" ; "strings" ; "os" ; "sync" )
+import ( "net" ; "fmt" ; "bufio" ; "strings" ; "os" ; "sync" ; "encoding/gob" ; "io" ; "log")
 
 // TODO: remove the sting and brodcast functionlity 
 // TODO: 
@@ -18,55 +18,82 @@ var mutex sync.Mutex
 
 var messagesSent =  make(map[string]bool)
 
+type Ledger struct {
+	Connections []string
+}
+
+func makeLedger() *Ledger {
+	Ledger := new(Ledger)
+	return Ledger
+}
+
+// update the connectionsList
+func UpdateLedger() *Ledger {
+	Ledger := new(Ledger)
+	mutex.Lock()
+	for _, peer := range peers {
+		Ledger.Connections = append(Ledger.Connections, peer.RemoteAddr().String())
+	}
+	Ledger.Connections = append(Ledger.Connections, peers[0].LocalAddr().String())
+	mutex.Unlock()
+	return Ledger
+}
+
+// Send the ledger to the peers connected
+func sendLedger(conn net.Conn) {
+	ledger := UpdateLedger() // string array
+	enc := gob.NewEncoder(conn) // encodes connection
+	enc.Encode(ledger) // encodes and sends array
+}
+
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	// adding conn to the networklist
 	peers = append(peers, conn)
+	go sendLedger(conn)
+
+	// struct for recieving array
+	recieved := &Ledger{}
+
 
 	// reads on incomming
-	reader := bufio.NewReader(conn)
+	//reader := bufio.NewReader(conn)
 
 	// other end of conn
 	otherEnd := conn.RemoteAddr().String()
 
   for {
-		msg, err := reader.ReadString('\n')
+		dec := gob.NewDecoder(conn) //decodes on the connection
+		err := dec.Decode(recieved) // decodes the stringarray
+		if (err == io.EOF) {
+		fmt.Println("Connection closed by " + conn.RemoteAddr().String())
+		return
+		}
+		if (err != nil) {
+		log.Println(err.Error())
+		return
+		}
+		fmt.Println(recieved)
+		
 		if (err != nil) {
 			fmt.Println("Ending session with " + otherEnd)
 			return
 		}
-		if !messagesSent[msg] {
-			fmt.Print(string(msg))
-			go userOutput(msg)
-			messagesSent[msg] = true
-		}
 	}
 }
 
-// reads input from commandline
-func userInput(){
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		msg, _ := reader.ReadString('\n')
-		mutex.Lock() 
-		for _, peer := range peers {
-			if !messagesSent[msg] {
-				peer.Write([]byte(msg))
-			}
-		}
-		messagesSent[msg] = true
-		mutex.Unlock()
+/*
+func dialNewPeer(peerAddr string){
+	conn, err := net.Dial("tcp", peerAddr)
+	if err != nil {
+		fmt.Println("The peer has not been found")
+	} else {
+		go handleConnection(conn)
 	}
 }
-
-// forwards message if not send
-func userOutput(msg string) {
-	for _, peer := range peers {
-		peer.Write([]byte(msg))
-	}
-}
+*/
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
@@ -79,8 +106,6 @@ func main() {
 
 	// Calling the peerAddr
 	conn, err := net.Dial("tcp", peerAddr)
-
-	go userInput()
 
 	// Checks if there is an error when dialing the conncection
 	if err != nil {
