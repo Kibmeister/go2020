@@ -46,6 +46,19 @@ func sendLedger(conn net.Conn) {
 	enc.Encode(ledger) // encodes and sends array
 }
 
+func updateLocalList(peersToConnect[] string){
+	mutex.Lock()
+	for _, peerC := range peersToConnect {
+		fmt.Println(peerC)
+		conn, err := net.Dial("tcp", peerC)
+		if err != nil {
+			fmt.Println("Something went wrong")
+		}
+		handleConnection(conn)
+	}
+	mutex.Unlock()
+}
+
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -57,7 +70,6 @@ func handleConnection(conn net.Conn) {
 	// struct for recieving array
 	recieved := &Ledger{}
 
-
 	// reads on incomming
 	//reader := bufio.NewReader(conn)
 
@@ -67,14 +79,20 @@ func handleConnection(conn net.Conn) {
   for {
 		dec := gob.NewDecoder(conn) //decodes on the connection
 		err := dec.Decode(recieved) // decodes the stringarray
+
 		if (err == io.EOF) {
 		fmt.Println("Connection closed by " + conn.RemoteAddr().String())
 		return
 		}
+
 		if (err != nil) {
 		log.Println(err.Error())
 		return
 		}
+
+		var recieving = recieved.Connections //recieved strings of connections
+		
+		go updateLocalList(recieving)
 		fmt.Println(recieved)
 		
 		if (err != nil) {
@@ -83,17 +101,6 @@ func handleConnection(conn net.Conn) {
 		}
 	}
 }
-
-/*
-func dialNewPeer(peerAddr string){
-	conn, err := net.Dial("tcp", peerAddr)
-	if err != nil {
-		fmt.Println("The peer has not been found")
-	} else {
-		go handleConnection(conn)
-	}
-}
-*/
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
