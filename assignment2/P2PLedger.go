@@ -16,10 +16,28 @@ var peers []net.Conn
 
 var mutex sync.Mutex
 
-var messagesSent =  make(map[string]bool)
+var messagesSent =  make(map[*Ledger]bool)
+
+var haveSent = make(map[string]string)
+
+var requester = make(map[string]bool)
 
 type Ledger struct {
+	Accounts map[string]int
+	MessagesSent string
 	Connections []string
+}
+
+type Transaction struct {
+	Id string
+	Amount int
+	From string
+	To string
+}
+
+func makeTransaction() *Transaction {
+	Transaction := new(Transaction)
+	return Transaction
 }
 
 func makeLedger() *Ledger {
@@ -27,14 +45,52 @@ func makeLedger() *Ledger {
 	return Ledger
 }
 
+func dummy() {
+	Ledger := makeLedger()
+	var t1 = makeTransaction()
+	t1.Id = "Lars"
+	t1.Amount = 12
+	t1.From = "Lars"
+	t1.To = "Birgit"
+	Ledger.Accounts[t1.From] = 100
+
+
+	var t2 = makeTransaction()
+	t2.Id = "Birgit"
+	t2.Amount = -13
+	t2.From = "Birgit"
+	t2.To = "Lars"
+	Ledger.Accounts[t2.From] = 1234
+
+	var t3 = makeTransaction()
+	t3.Id = "Lise"
+	t3.Amount = 155
+	t3.From = "Lise"
+	t3.To = "Lars"
+	Ledger.Accounts[t1.From] = 1245
+
+
+	for i := 0; i < 100; i++ {
+		// call transaction method
+	}
+}
+
+func (l *Ledger) Transaction(t *Transaction) {
+	mutex.Lock()
+	l.Accounts[t.From] -= t.Amount
+	l.Accounts[t.To] += t.Amount
+	mutex.Unlock()
+}
+
 // update the connectionsList
 func UpdateLedger() *Ledger {
-	Ledger := new(Ledger)
 	mutex.Lock()
+	Ledger := new(Ledger)
 	for _, peer := range peers {
 		Ledger.Connections = append(Ledger.Connections, peer.RemoteAddr().String())
 	}
 	Ledger.Connections = append(Ledger.Connections, peers[0].LocalAddr().String())
+	Ledger.MessagesSent = "peerlist"
 	mutex.Unlock()
 	return Ledger
 }
@@ -46,16 +102,47 @@ func sendLedger(conn net.Conn) {
 	enc.Encode(ledger) // encodes and sends array
 }
 
-func updateLocalList(peersToConnect[] string){
+// Dial other connections
+func dialNewConnections(peersToConnect[] string){
 	mutex.Lock()
 	for _, peerC := range peersToConnect {
-		fmt.Println(peerC)
 		conn, err := net.Dial("tcp", peerC)
 		if err != nil {
-			fmt.Println("Something went wrong")
+		} else {
+			handleConnection(conn)
 		}
-		handleConnection(conn)
 	}
+	mutex.Unlock()
+}
+
+func handleMessage(ledger *Ledger, conn net.Conn) {
+	var u string = ledger.MessagesSent
+	mutex.Lock()
+	if u == "RequestingPeerList"{
+		requester[conn.RemoteAddr().String()] = true
+		go sendLedger(conn)
+		fmt.Println("Have sent peerlist to" + conn.RemoteAddr().String())
+		mutex.Unlock()
+		return
+	} 
+	if u == "peerlist" && requester[conn.RemoteAddr().String()] == true{
+		fmt.Println("got peerlist from")
+		fmt.Println(ledger.Connections)
+		go dialNewConnections(ledger.Connections)
+		mutex.Unlock()
+		return
+	} else{
+		mutex.Unlock()
+		return
+	} 
+}
+
+func Requester(conn net.Conn, m string) {
+	mutex.Lock()
+	ledger := new(Ledger)
+	ledger.MessagesSent = m
+	enc := gob.NewEncoder(conn) // encodes connection
+	enc.Encode(ledger) // encodes and sends array
 	mutex.Unlock()
 }
 
@@ -63,41 +150,36 @@ func updateLocalList(peersToConnect[] string){
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
+	haveSent := make(map[string]string)
 	// adding conn to the networklist
 	peers = append(peers, conn)
-	go sendLedger(conn)
+
+	//request for connections peer list
+	go Requester(conn, "RequestingPeerList")
 
 	// struct for recieving array
 	recieved := &Ledger{}
 
-	// reads on incomming
-	//reader := bufio.NewReader(conn)
-
-	// other end of conn
-	otherEnd := conn.RemoteAddr().String()
-
   for {
-		dec := gob.NewDecoder(conn) //decodes on the connection
-		err := dec.Decode(recieved) // decodes the stringarray
+			dec := gob.NewDecoder(conn) //decodes on the connection
+			err := dec.Decode(recieved) // decodes the stringarray
 
-		if (err == io.EOF) {
-		fmt.Println("Connection closed by " + conn.RemoteAddr().String())
-		return
-		}
+			if haveSent[recieved.MessagesSent] != conn.RemoteAddr().String() {
+				haveSent[recieved.MessagesSent] = conn.RemoteAddr().String()
+				fmt.Println("wat1")
+				fmt.Println(recieved.MessagesSent)
+				go handleMessage(recieved, conn) // Handling the queries
+				
+				if (err == io.EOF) {
+					fmt.Println("Connection closed by " + conn.RemoteAddr().String())
+					return
+				}
 
-		if (err != nil) {
-		log.Println(err.Error())
-		return
-		}
-
-		var recieving = recieved.Connections //recieved strings of connections
-		
-		go updateLocalList(recieving)
-		fmt.Println(recieved)
-		
-		if (err != nil) {
-			fmt.Println("Ending session with " + otherEnd)
-			return
+				if (err != nil) {
+					log.Println(err.Error())
+					return
+				}
+			} else {
 		}
 	}
 }
@@ -131,7 +213,7 @@ func main() {
 	fmt.Println("Listening on port: " + port)
 	for {
 		conn, _ := ln.Accept()
-		fmt.Println("Got a connection...")
+		fmt.Println("Got a connection... with" + conn.RemoteAddr().String())
 		go handleConnection(conn)
 	}
 }
