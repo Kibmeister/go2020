@@ -7,82 +7,74 @@ import (
 )
 
 var e = big.NewInt(3)
-var n = big.NewInt(0)         // public key
-var d = big.NewInt(0)         // privat key
-var encrypted = big.NewInt(0) // encrypted message
-var decrypted = big.NewInt(0) // decrypted message
+var n = big.NewInt(0)        // public key
+var d = big.NewInt(0)        // privat key
+var encrypted = new(big.Int) // encrypted message new.Big.NewInt(0)
+var decrypted = new(big.Int) // decrypted message
 
-type PublicKey struct {
-	PublicKeyE *big.Int
-	PublicKeyN *big.Int
-}
+func keyGen(k int) {
+	for {
+		p, _ := rand.Prime(rand.Reader, k/2)   // makes a random prime
+		q, _ := rand.Prime(rand.Reader, k-k/2) // makes a random prime
+		// fmt.Println("the first random prime : ", p)
+		// fmt.Println("the second random prime : ", q)
 
-func makePublicKey() *PublicKey {
-	PublicKey := new(PublicKey)
-	return PublicKey
-}
+		n = n.Mul(p, q) // first digit in our public key
 
-func keyGen(k int) *PublicKey {
-	PublicKey := makePublicKey()
-	p, _ := rand.Prime(rand.Reader, k/2)   // makes a random prime
-	q, _ := rand.Prime(rand.Reader, k-k/2) // makes a random prime
-	fmt.Println("the first random prime : ", p)
-	fmt.Println("the second random prime : ", q)
+		e := big.NewInt(3) // the exponent to match with the public key
 
-	n = n.Mul(p, q) // first digit in our public key
-	PublicKey.PublicKeyN = n
+		one := big.NewInt(1)
 
-	e := big.NewInt(3) // the exponent to match with the public key
-	PublicKey.PublicKeyE = e
+		pSub := new(big.Int).Sub(p, one)
+		qSub := new(big.Int).Sub(q, one)
+		pq := new(big.Int).Mul(pSub, qSub)
 
-	one := big.NewInt(1)
+		d.ModInverse(e, pq)
+		integer := new(big.Int).Mul(e, d)
+		integer.Mod(integer, pq)
 
-	primesSubtract := new(big.Int)
-
-	primesSubtract = primesSubtract.Mul(primesSubtract.Sub(p, one), primesSubtract.Sub(q, one))
-
-	d = e.ModInverse(e, primesSubtract)
+		if integer.Int64() == 1 {
+			fmt.Println("this is the publicKey", n)
+			fmt.Println("this is the privateKey :", d)
+			return
+		}
+	}
 
 	// gcdP := new(big.Int).GCD(nil, nil, e, p.Sub(p, one)) // the greates common divisor for p
 	// fmt.Println("gcd for p: ", gcdP)
 	// gcdQ := new(big.Int).GCD(nil, nil, e, q.Sub(q, one)) // the greates common divisor for q
 	// fmt.Println("gcd for q: ", gcdQ)
 
-	// if gcdP == big.NewInt(1) && gcdQ == big.NewInt(1)  {
-	// 	d = e.ModInverse(e, primesSubtract)
+	// if gcdP == big.NewInt(1) && gcdQ == big.NewInt(1) {
+	// 	d = e.ModInverse(e, pq)
 	// 	fmt.Println("this is the privateKey :", d)
 	// }
-	fmt.Println("this is the publicKey", PublicKey.PublicKeyN, PublicKey.PublicKeyE)
-	fmt.Println("this is the privateKey :", d)
 
-	return PublicKey
 }
 
 // Test your solution by verifying (at least) that your modulus has the required length and that encryption followed by decryption of a few random plaintexts outputs the original plaintexts. Note that plaintexts and ciphtertexts in RSA are basically numbers in a certain interval. So it is sufficient to test if encryption of a number followed by decryption returns the original number. You do not need to, for instance, convert character strings to numbers.
 
-func encrypt(m *big.Int, n *big.Int, e *big.Int) *big.Int {
-	// create a range that stores the cifers of i
-	bigInt := new(big.Int)
+func encrypt(m *big.Int, e *big.Int, n *big.Int) *big.Int {
+	fmt.Println("the number before encryption :", m)
+	encrypted.Exp(m, e, n)
 
-	bigInt.Exp(m, e, n)
-	encrypted = bigInt
 	fmt.Println("this is encrypted :", encrypted)
 
-	return bigInt
+	return encrypted
 }
 
-func decrypt(encrypted *big.Int, n *big.Int, d *big.Int) *big.Int {
-	bigInt := new(big.Int)
+func decrypt(c *big.Int, d *big.Int, n *big.Int) *big.Int {
+
 	fmt.Println("encrypt : ", encrypted, "public key : ", n, "private key : ", d)
-	bigInt.Exp(encrypted, d, n)
-	decrypted = bigInt
+	decrypted.Exp(encrypted, d, n)
+
 	fmt.Println("this is decrypted :", decrypted)
 
-	return bigInt
+	return decrypted
 }
 
 func main() {
-	keyGen(9)
-	encrypt(big.NewInt(20), n, e)
-	decrypt(encrypted, n, d)
+	keyGen(64)
+	encrypt(big.NewInt(77), e, n)
+	decrypt(encrypted, d, n)
 }
