@@ -130,7 +130,7 @@ func main() {
 	keyGen(64)
 	encrypt(big.NewInt(77), e, n)
 	decrypt(encrypted, d, n)
-	cipher := "xBayErMetrofilxx"
+	cipher := "TheSecretMessage"
 	encrypted := "file.txt"  //OPRET EN FIL I MAPPEN MED DETTE NAVN
 	// privateKey := d.String() //d er værdien ved en privatekey
 	encryptToFile("hello", cipher, encrypted)
