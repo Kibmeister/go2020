@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 )
 
@@ -73,8 +76,63 @@ func decrypt(c *big.Int, d *big.Int, n *big.Int) *big.Int {
 	return decrypted
 }
 
+func encryptToFile(key string, encrypted string, file string) {
+	// Input = filename and write ciphertext to file
+	slice := make([]byte, 16)
+	copy(slice, key)
+	plaintext := []byte(encrypted)
+
+	block, err := aes.NewCipher(slice)
+	if err != nil {
+		panic(err)
+	}
+	
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[aes.BlockSize:]
+	stream := cipher.NewCTR(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+	if err != nil {
+		panic(err)
+	}
+	err = ioutil.WriteFile(file, ciphertext, 0777)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func decryptFromFile(key string, file string) {
+	// read ciphertext from file --> decrypt --> output plaintext
+	
+	slice := make([]byte, 16)
+	copy(slice, key)
+
+	block, err := aes.NewCipher(slice)
+	if err != nil {
+		panic(err)
+	}
+	ciphertext, err := ioutil.ReadFile(file)
+	if err != nil {
+		panic(err)
+	}
+
+	plaintext := make([]byte, aes.BlockSize+len(ciphertext))
+	iv := plaintext[:aes.BlockSize]
+
+	//CBC mode always works in whole blocks.
+	mode := cipher.NewCTR(block, iv)
+	mode.XORKeyStream(plaintext, ciphertext[aes.BlockSize:] )
+
+	fmt.Printf("%s\n", plaintext)
+}
+
 func main() {
 	keyGen(64)
 	encrypt(big.NewInt(77), e, n)
 	decrypt(encrypted, d, n)
+	cipher := "TheSecretMessage"
+	encrypted := "file.txt"  //OPRET EN FIL I MAPPEN MED DETTE NAVN
+	// privateKey := d.String() //d er værdien ved en privatekey
+	encryptToFile("hello", cipher, encrypted)
+	decryptFromFile("hello", encrypted)
 }
