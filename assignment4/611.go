@@ -16,34 +16,39 @@ var d = big.NewInt(0)        // privat key
 var encrypted = new(big.Int) // encrypted message new.Big.NewInt(0)
 var decrypted = new(big.Int) // decrypted message
 var signedMessage = new(big.Int)
+var byteMessage []byte 
+
 
 // returns hashed bytes of string in big.Int
-func Hash(Message []byte) *big.Int {
-	hash := new(big.Int)
+func Hash(Message []byte) []byte {
 	h := sha256.New()
 	_, err := h.Write([]byte(Message))
 	if err != nil {
 		panic(err)
 	}
-	hash.SetBytes(h.Sum(nil))
-	return hash
+	// fmt.Println("this is the hash sum : ", h.Sum(nil) )
+	return h.Sum(nil)
 }
 
 //signs message by decrypting the hashed message
-func sign(Message string) {
-	msg := []byte(Message)
-	msgSum := Hash(msg)
-	signed := decrypt(msgSum, e, n)
+func sign(Message []byte) {
+	msgSum := Hash(Message)
+	byteMessage = msgSum
+
+	signed := new(big.Int).Exp(new(big.Int).SetBytes(msgSum), d, n)
 	signedMessage = signed
+	
 }
 
-func verify(m *big.Int) {
-	verify := encrypt(m, d, n)
-	message := Hash([]byte("message"))
-	if verify.Cmp(message) == 0 {
-		fmt.Println("message verified")
+func verify() {
+	fmt.Println("signatur :" , signedMessage)
+	fmt.Println("comparer : ", new(big.Int).Exp(signedMessage, e, n).Int64())
+	fmt.Println("n :" , n)
+	fmt.Println("e :" , e)
+	if new(big.Int).SetBytes(byteMessage).Int64() == new(big.Int).Exp(signedMessage, e, n).Int64() {
+		fmt.Println("verification is goood ")
 	} else {
-		fmt.Println("not")
+		fmt.Println("this is not verified ")
 	}
 }
 
@@ -90,7 +95,7 @@ func encrypt(m *big.Int, e *big.Int, n *big.Int) *big.Int {
 func decrypt(c *big.Int, d *big.Int, n *big.Int) *big.Int {
 
 	fmt.Println("encrypt : ", encrypted, "public key : ", n, "private key : ", d)
-	decrypted.Exp(encrypted, d, n)
+	decrypted.Exp(c, d, n)
 
 	fmt.Println("this is decrypted :", decrypted)
 
@@ -148,14 +153,14 @@ func decryptFromFile(key string, file string) {
 }
 
 func main() {
-	keyGen(64)
-	sign("message")
-	verify(signedMessage)
-	encrypt(big.NewInt(77), e, n)
-	decrypt(encrypted, d, n)
-	cipher := "TheSecretMessage"
-	encrypted := "file.txt"  //OPRET EN FIL I MAPPEN MED DETTE NAVN
+	keyGen(1024)
+	sign([]byte("message"))
+	verify()
+	// encrypt(big.NewInt(77), e, n)
+	// decrypt(encrypted, d, n)
+	// cipher := "TheSecretMessage"
+	// encrypted := "file.txt"  //OPRET EN FIL I MAPPEN MED DETTE NAVN
 	// privateKey := d.String() //d er værdien ved en privatekey
-	encryptToFile("hello", cipher, encrypted)
-	decryptFromFile("hello", encrypted)
+	// encryptToFile("hello", cipher, encrypted)
+	// decryptFromFile("hello", encrypted)
 }
