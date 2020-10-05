@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"crypto/sha256"
 )
 
 var e = big.NewInt(3)
@@ -14,6 +15,36 @@ var n = big.NewInt(0)        // public key
 var d = big.NewInt(0)        // privat key
 var encrypted = new(big.Int) // encrypted message new.Big.NewInt(0)
 var decrypted = new(big.Int) // decrypted message
+var signedMessage = new(big.Int)
+
+func Hash(Message []byte) *big.Int {
+	hash := new(big.Int)
+	h := sha256.New()
+	_, err := h.Write([]byte(Message))
+	if err != nil {
+		panic(err)
+	}
+	hash.SetBytes(h.Sum(nil))
+	return hash
+}
+
+func sign(Message string) {
+	msg := []byte(Message)
+	msgSum := Hash(msg)
+	signed := decrypt(msgSum, e, n)
+	signedMessage = signed
+}
+
+func verify(m *big.Int,) {
+	verify := encrypt(m, d, n)
+	message := Hash([]byte("this is a message"))
+	if verify.Cmp(message) == 0 {
+		fmt.Println("message verified")
+	}
+	if verify.Cmp(message) != 0 {
+		fmt.Println("message not verified")
+	}
+}
 
 func keyGen(k int) {
 	for {
@@ -42,17 +73,6 @@ func keyGen(k int) {
 			return
 		}
 	}
-
-	// gcdP := new(big.Int).GCD(nil, nil, e, p.Sub(p, one)) // the greates common divisor for p
-	// fmt.Println("gcd for p: ", gcdP)
-	// gcdQ := new(big.Int).GCD(nil, nil, e, q.Sub(q, one)) // the greates common divisor for q
-	// fmt.Println("gcd for q: ", gcdQ)
-
-	// if gcdP == big.NewInt(1) && gcdQ == big.NewInt(1) {
-	// 	d = e.ModInverse(e, pq)
-	// 	fmt.Println("this is the privateKey :", d)
-	// }
-
 }
 
 // Test your solution by verifying (at least) that your modulus has the required length and that encryption followed by decryption of a few random plaintexts outputs the original plaintexts. Note that plaintexts and ciphtertexts in RSA are basically numbers in a certain interval. So it is sufficient to test if encryption of a number followed by decryption returns the original number. You do not need to, for instance, convert character strings to numbers.
@@ -128,6 +148,8 @@ func decryptFromFile(key string, file string) {
 
 func main() {
 	keyGen(64)
+	sign("this is a message")
+	verify(signedMessage)
 	encrypt(big.NewInt(77), e, n)
 	decrypt(encrypted, d, n)
 	cipher := "TheSecretMessage"
