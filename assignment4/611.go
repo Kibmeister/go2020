@@ -17,6 +17,7 @@ var encrypted = new(big.Int) // encrypted message new.Big.NewInt(0)
 var decrypted = new(big.Int) // decrypted message
 var signedMessage = new(big.Int)
 
+// returns hashed bytes of string in big.Int
 func Hash(Message []byte) *big.Int {
 	hash := new(big.Int)
 	h := sha256.New()
@@ -28,6 +29,7 @@ func Hash(Message []byte) *big.Int {
 	return hash
 }
 
+//signs message by decrypting the hashed message
 func sign(Message string) {
 	msg := []byte(Message)
 	msgSum := Hash(msg)
@@ -35,14 +37,13 @@ func sign(Message string) {
 	signedMessage = signed
 }
 
-func verify(m *big.Int,) {
+func verify(m *big.Int) {
 	verify := encrypt(m, d, n)
-	message := Hash([]byte("this is a message"))
+	message := Hash([]byte("message"))
 	if verify.Cmp(message) == 0 {
 		fmt.Println("message verified")
-	}
-	if verify.Cmp(message) != 0 {
-		fmt.Println("message not verified")
+	} else {
+		fmt.Println("not")
 	}
 }
 
@@ -148,7 +149,7 @@ func decryptFromFile(key string, file string) {
 
 func main() {
 	keyGen(64)
-	sign("this is a message")
+	sign("message")
 	verify(signedMessage)
 	encrypt(big.NewInt(77), e, n)
 	decrypt(encrypted, d, n)
