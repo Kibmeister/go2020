@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"crypto/sha256"
+	"time"
 )
 
 var e = big.NewInt(3)
@@ -37,14 +38,12 @@ func sign(Message []byte) {
 
 	signed := new(big.Int).Exp(new(big.Int).SetBytes(msgSum), d, n)
 	signedMessage = signed
-	
 }
 
+// 
 func verify() {
-	fmt.Println("signatur :" , signedMessage)
-	fmt.Println("comparer : ", new(big.Int).Exp(signedMessage, e, n).Int64())
-	fmt.Println("n :" , n)
-	fmt.Println("e :" , e)
+	fmt.Println("signatur :" , new(big.Int).Exp(signedMessage, e, n).Int64())
+	fmt.Println("comparer : ", new(big.Int).SetBytes(byteMessage).Int64())
 	if new(big.Int).SetBytes(byteMessage).Int64() == new(big.Int).Exp(signedMessage, e, n).Int64() {
 		fmt.Println("verification is goood ")
 	} else {
@@ -153,6 +152,7 @@ func decryptFromFile(key string, file string) {
 }
 
 func main() {
+	start := time.Now()
 	keyGen(1024)
 	sign([]byte("message"))
 	verify()
@@ -163,4 +163,5 @@ func main() {
 	// privateKey := d.String() //d er værdien ved en privatekey
 	// encryptToFile("hello", cipher, encrypted)
 	// decryptFromFile("hello", encrypted)
+	fmt.Println(time.Since(start))
 }
