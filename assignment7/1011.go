@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"crypto/sha256"
-	"time"
+	//"time"
 )
 
 var e = big.NewInt(3)
@@ -32,17 +32,18 @@ func Hash(Message []byte) []byte {
 }
 
 //signs message by decrypting the hashed message
-func sign(Message []byte) {
+func SignMessage(Message []byte) *big.Int {
 	msgSum := Hash(Message)
 	byteMessage = msgSum
 
 	signed := new(big.Int).Exp(new(big.Int).SetBytes(msgSum), d, n)
 	signedMessage = signed
+	return signed
 }
 
 // 
 func verify() {
-	fmt.Println("signatur :" , new(big.Int).Exp(signedMessage, e, n).Int64())
+	fmt.Println("signatur : " , new(big.Int).Exp(signedMessage, e, n).Int64())
 	fmt.Println("comparer : ", new(big.Int).SetBytes(byteMessage).Int64())
 	if new(big.Int).SetBytes(byteMessage).Int64() == new(big.Int).Exp(signedMessage, e, n).Int64() {
 		fmt.Println("verification is goood ")
@@ -51,7 +52,7 @@ func verify() {
 	}
 }
 
-func keyGen(k int) {
+func KeyGen(k int) {
 	for {
 		p, _ := rand.Prime(rand.Reader, k/2)   // makes a random prime
 		q, _ := rand.Prime(rand.Reader, k-k/2) // makes a random prime
@@ -80,7 +81,15 @@ func keyGen(k int) {
 	}
 }
 
-// Test your solution by verifying (at least) that your modulus has the required length and that encryption followed by decryption of a few random plaintexts outputs the original plaintexts. Note that plaintexts and ciphtertexts in RSA are basically numbers in a certain interval. So it is sufficient to test if encryption of a number followed by decryption returns the original number. You do not need to, for instance, convert character strings to numbers.
+// Test your solution by verifying (at least) that 
+// your modulus has the required length and that
+// encryption followed by decryption of a few random
+// plaintexts outputs the original plaintexts. Note that 
+//plaintexts and ciphtertexts in RSA are basically numbers
+// in a certain interval. So it is sufficient to test if
+// encryption of a number followed by decryption returns 
+// the original number. You do not need to, for instance, 
+// convert character strings to numbers.
 
 func encrypt(m *big.Int, e *big.Int, n *big.Int) *big.Int {
 	fmt.Println("the number before encryption :", m)
@@ -101,7 +110,62 @@ func decrypt(c *big.Int, d *big.Int, n *big.Int) *big.Int {
 	return decrypted
 }
 
-func encryptToFile(key string, encrypted string, file string) {
+// function for generating the file where the secretkey can be encrypted under a password
+func Generate(filename string, password string) string {
+	KeyGen(52)
+	var pk string // publickey
+	var sk string // secretkey
+	pk = n.String() + ", " + e.String() // gathers pk in a single string
+	sk = d.String()
+
+	slice := make([]byte, 16) // the secretkey has to have a blocklength of 16, because of iv
+	copy(slice, password)
+	plaintext := []byte(sk)
+
+	block, err := aes.NewCipher(slice)
+	if err != nil {
+		panic(err)
+	}
+
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[aes.BlockSize:]
+	stream := cipher.NewCTR(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+	if err != nil {
+		panic(err)
+	}
+	err = ioutil.WriteFile(filename, ciphertext, 0777)
+	if err != nil {
+		panic(err)
+	}
+	d = big.NewInt(0)
+	return pk
+}
+
+func Sign(filename string, password string, msg []byte) *big.Int {
+	var sk string
+	newD := new(big.Int)
+	signature := new(big.Int)
+	sk = decryptFromFile(password, filename) // return secret key the program does not work 
+	newD = stringToBigInt(sk)
+	d = newD
+	signature = SignMessage(msg)
+	return signature
+}
+
+func stringToBigInt(s string) *big.Int {
+	i := new(big.Int)
+    _, err := fmt.Sscan(s, i)
+    if err != nil {
+        fmt.Println("error scanning value:", err)
+    } else {
+				return i
+		}
+	return i
+}
+
+/*func encryptToFile(key string, encrypted string, file string) {
 	// Input = filename and write ciphertext to file
 	slice := make([]byte, 16)
 	copy(slice, key)
@@ -124,9 +188,9 @@ func encryptToFile(key string, encrypted string, file string) {
 	if err != nil {
 		panic(err)
 	}
-}
+}*/
 
-func decryptFromFile(key string, file string) {
+func decryptFromFile(key string, file string) string {
 	// read ciphertext from file --> decrypt --> output plaintext
 	
 	slice := make([]byte, 16)
@@ -134,10 +198,12 @@ func decryptFromFile(key string, file string) {
 
 	block, err := aes.NewCipher(slice)
 	if err != nil {
+		fmt.Println("error occured")
 		panic(err)
 	}
 	ciphertext, err := ioutil.ReadFile(file)
 	if err != nil {
+		fmt.Println("error occured")
 		panic(err)
 	}
 
@@ -148,20 +214,25 @@ func decryptFromFile(key string, file string) {
 	mode := cipher.NewCTR(block, iv)
 	mode.XORKeyStream(plaintext, ciphertext[aes.BlockSize:] )
 
+	sk := string(plaintext)
 	fmt.Printf("%s\n", plaintext)
+	fmt.Println(string(plaintext), "this is D")
+	return sk
 }
 
 func main() {
-	start := time.Now()
-	keyGen(1024)
-	sign([]byte("message"))
-	verify()
-	// encrypt(big.NewInt(77), e, n)
-	// decrypt(encrypted, d, n)
-	// cipher := "TheSecretMessage"
-	// encrypted := "file.txt"  //OPRET EN FIL I MAPPEN MED DETTE NAVN
-	// privateKey := d.String() //d er værdien ved en privatekey
-	// encryptToFile("hello", cipher, encrypted)
-	// decryptFromFile("hello", encrypted)
-	fmt.Println(time.Since(start))
+	//start := time.Now()
+	//KeyGen(52)
+	//sign([]byte("message"))
+	//verify()
+	//encrypt(big.NewInt(77), e, n)
+	//decrypt(encrypted, d, n)
+	//cipher := "TheSecretMessage"
+	//encrypted := "file.txt"  //OPRET EN FIL I MAPPEN MED DETTE NAVN
+	//privateKey := d.String() //d er værdien ved en privatekey
+	//encryptToFile("hello", cipher, encrypted)
+	//decryptFromFile("hello", encrypted)
+	Generate("filename", "password")
+	Sign("filename", "pasword", []byte("hello you"))
+	//fmt.Println(time.Since(start))
 }
