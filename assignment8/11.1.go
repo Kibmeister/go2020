@@ -99,18 +99,22 @@ func makeTransaction() *Transaction {
 func send(msg *Message, conn net.Conn) {
 	enc := gob.NewEncoder(conn) // encodes connection
 	enc.Encode(msg) // encodes and sends array
+	return 
 }
 
 func updateBlock() {
 	time.Sleep(10000 *time.Millisecond)
-	mutex.Lock()
+	fmt.Println("Block is now updated")
 	var update = makeMessage()
-	update.Ledger.NewBlock = ledger.NewBlock
 	var sss = strconv.Itoa(LocalBlockNumber)
 	var s = RSA.Sign([]byte(sss))
 	var ss = convertBigIntToString(s)
-	update.Ledger.NewBlock.Signature = ss
+	ledger.NewBlock.Signature = ss
+	update.Ledger = ledger
+	fmt.Println("This is the ledger: ", update.Ledger.NewBlock.IDlist)
+	fmt.Println(ledger.NewBlock.Signature, "this is s")
 	for _, conn := range connections{
+		fmt.Println("send to peers")
 		go send(update, conn)
 	}
 	LocalBlockNumber++
@@ -118,7 +122,6 @@ func updateBlock() {
 	ledger.NewBlock.IDlist = make(map[string]int)
 	ledger.NewBlock.BlockNr = LocalBlockNumber
 	tempOrder = 0
-	mutex.Unlock()
 }
 
 func handleConnection(conn net.Conn) {
@@ -133,7 +136,7 @@ func handleConnection(conn net.Conn) {
 
 
 		// checks if Connections list is not emty - if not it will be treated as a new peer
-		if message.Connections != nil {
+		if ( message.Connections != nil && ledger.Phase == 1) {
 			checkForConnections(message) // check if the peer is connected
 			connectToNewPeers() // connect the peers <10
 			broadcast(myIp) // broadcast presence
@@ -142,31 +145,38 @@ func handleConnection(conn net.Conn) {
 		// when message.ledger not empty, this will checked if the localledger aldready have the same pk. If not, this pk will be added to the local ledger
 		if(message.Ledger != nil) {
 			addNewPk(message)
-			if(message.Ledger.Sequencer != "" && !isDesignatedSequencer) { // if sequencer is now empty and the peer is not sequencer
+			// if sequencer is now empty and the peer is not sequencer it will add the sequencer -- This is phase 1
+			if message.Ledger.Phase == 1 {
+				if message.Ledger.Sequencer != "" && !isDesignatedSequencer { 
 				ledger.Sequencer = message.Ledger.Sequencer
 				SequencerKeyPair = sortKeyPair(ledger.Sequencer)
-				fmt.Println("this is the sequencer" + ledger.Sequencer)
-			}
-			if( message.Ledger.Phase == 2 ) {
-				ledger.Phase = 2 // updates the local ledger with the new phase
-			}
-			if(message.Ledger.NewBlock != nil){
-				if(verifyBlock(message)) {
-					// execute transactions and incremete localBlocknumber
+				fmt.Println("Sequencer found...")
 				}
 			}
-		}
-
-		if(!isDesignatedSequencer) {
-			sMessage := &Message{}
-			sMessage.Ledger = ledger
-			sMessage.Ledger.Phase = ledger.Phase
-			if(informed) { // if the peer is informed about the squencer, it will not send the sequencer again
-				sMessage.Ledger.Sequencer = ""
+			// In phase 2 it will first check that the sequencer has informed this, and then it will read whether the 
+			// there is a signed block or not
+			if( message.Ledger.Phase == 2 ) {
+				ledger.Phase = 2 // updates the local ledger with the new phase
+				LocalBlockNumber = message.Ledger.NewBlock.BlockNr // if the message contains a block number, this will be added
+				if(message.Ledger.NewBlock.Signature != "") { // if the signature is not empty, this means that there a signed transactions
+					if(verifyBlock(message)) { // if the block can be verified, it will execute alle the transactions
+						executeAllNewTransactions(message)
+					}
+				}
 			}
-			informed = true
-			go send(sMessage, conn)
+			
+			// This part forward the sequencer, if someone in the network is uninformed
+			if(!informed) { 
+				sMessage := &Message{}
+				sMessage.Ledger = ledger
+				sMessage.Ledger.Phase = ledger.Phase// if the peer is informed about the squencer, it will not send the sequencer again
+				sMessage.Ledger.Sequencer = ""
+				informed = true
+				go send(sMessage, conn)
+			} 
 		}
+	
+
 
 		// checks if transactions list is not emty
 		if message.Transaction != nil {
@@ -200,6 +210,7 @@ func checkIfUserIsKnown(m *Message, conn net.Conn){
 	exists, _ := findString(connectedPeers, conn.RemoteAddr().String())
 	if exists {
 		addNewPk(m)
+		return 
 	} else {
 		return
 	}
@@ -214,6 +225,7 @@ func addNewPk(m *Message) {
 			//fmt.Println("this the key: ",key)
 		}
 	}
+	return
 }
 
 // handles outgoing transactions
@@ -221,12 +233,16 @@ func handleTransaction(t *Transaction) {
 	mutex.Lock()
 	exists := transactionIsUsed[t.Id]
 	if exists {
+		mutex.Unlock()
 		return
 	} else {
-		//localMsg.Transaction = t
+		// might be insufficient
+		localMsg.Transaction = t
+		///
 		sendTransaction(t)
 	}
 	mutex.Unlock()
+	return
 }
 
 // handles incomming transactions
@@ -234,6 +250,7 @@ func incommingTransaction(t *Transaction) {
 	mutex.Lock()
 	exists := transactionIsUsed[t.Id]
 	if exists {
+		mutex.Unlock()
 		return
 	} else {
 		go sendTransaction(t)
@@ -241,6 +258,7 @@ func incommingTransaction(t *Transaction) {
 		transactionIsUsed[t.Id] = true
 	}
 	mutex.Unlock()
+	return 
 }
 
 func executeTransaction(t *Transaction) {
@@ -249,11 +267,38 @@ func executeTransaction(t *Transaction) {
 	fmt.Println("------------------------------------------------------------------------------")
 
 	// checks if there is an account with t.From                                  
-	if worth1, exists1 := ledger.Accounts[t.To]; !exists1 {
+	if worth1, exists1 := ledger.Accounts[t.To]; !exists1 { // checks if the account exists
 		fmt.Println("account is not recognizable")
+	} else if ledger.Accounts[t.To] - t.Amount < 0 { // checks if ballance becomes negative if the amount is withdrawn
+		fmt.Println("Account does not have coverage")
 	} else {
 		ledger.Accounts[t.From] = worth1 - t.Amount
 		ledger.Accounts[t.To] += t.Amount
+	}
+}
+
+func executeAllNewTransactions(m *Message ) {
+	mList := m.Ledger.NewBlock.IDlist
+	tempIDList := make([]string,100)
+	for _, element1 := range ledger.Transactions {
+		tempIDList = append(tempIDList, element1.Id)
+	}
+	for key, _ := range mList {
+		exists, _ := findString(tempIDList, key)
+		fmt.Println("this key might exist", key)
+		if( exists ){
+			findTransactionAndExecute(ledger.Transactions, key)
+		}
+	} 
+}
+
+func findTransactionAndExecute( list []*Transaction, p string) {
+	fmt.Println("yolo12")
+	for _, l := range list {
+		if l.Id == p {
+			fmt.Println("yolo121234")
+			executeTransaction(l)
+		}
 	}
 }
 
@@ -265,6 +310,7 @@ func sendTransaction(t *Transaction) {
 		go send(transactionToSend, conn)
 	}
 	transactionIsUsed[t.Id] = true
+	return 
 }
 
 // sorts and checks peers
@@ -286,6 +332,7 @@ func checkForConnections(msg *Message) {
 func connectToNewPeers() {
 	mutex.Lock()
 	if len(connectedPeers)  > 10 { //if legnth of peers are greater than ten it will not connect to mere peers
+		mutex.Unlock()
 		return
 	}
 	if len(connectedPeers)  < 10 {
@@ -299,6 +346,7 @@ func connectToNewPeers() {
 		}
 	}
 	mutex.Unlock()
+	return 
 }
 
 // help function for comparing a string to an array
@@ -347,9 +395,16 @@ func initateSequencer() {
 	var e1 = convertBigIntToString(SequencerKeyPair.E)
 	var n1 = convertBigIntToString(SequencerKeyPair.N)
 	ledger.Sequencer = n1 + "," + e1
+	fmt.Println("hello")
 	ledger.NewBlock = new(Block)
 	ledger.NewBlock.IDlist = make(map[string]int)
 	ledger.NewBlock.BlockNr = LocalBlockNumber
+	time.Sleep(20000 *time.Millisecond) // gives the peers 20 seconds to connect to the network
+	ledger.Phase = 2
+	localMsg.Ledger = ledger // updates the ledger in the localMessage 
+	for _, conn := range connections{
+		go send(localMsg, conn) // tells all its connections that it now stage two
+	}
 }
 
 // dial up peer
@@ -384,9 +439,7 @@ func listeningForConnections(ln net.Listener) {
 
 // requests the peer for a transaction
 func requestTransaction() {
-	time.Sleep(20000 *time.Millisecond) // waits 20 seconds and then requests for a transaction
-
-	
+	time.Sleep(12000 *time.Millisecond) // waits 20 seconds and then requests for a transaction
 	// promt receivers with their following public kyes 
 	fmt.Println("Please enter a transaction by following order: to,amount.")
 	fmt.Println("------------------------------------------------------")
@@ -435,18 +488,22 @@ func requestTransaction() {
 		fmt.Println("----------------- TRANSACTION MADE ---------------")
 		fmt.Println("[From: ", t.From, "To: ", t.To, "amount: ", t.Amount, "id: ", t.Id)
 		fmt.Println("--------------------------------------------------")
+		ledger.Transactions = append(ledger.Transactions, t)
 		go handleTransaction(t)
 	}
+	
 }
 
 // executes transaction if the results come back true
 func verifyTransaction(inc *Transaction) {
 	if verifySignature(inc) {
 		if(isDesignatedSequencer) {
+			fmt.Println(inc.Id)
 			ledger.NewBlock.IDlist[inc.Id] = tempOrder
 			tempOrder++
 		}
 		ledger.Transactions = append(ledger.Transactions, inc)
+		return 
 	} else {
 		return
 	}
@@ -467,8 +524,10 @@ func verifySignature(user *Transaction) bool {
 	//fmt.Println("this is the testHash ", testHash)
 	IncPK = sortKeyPair(user.From) // sorts the keyPair to compare with signature
 	if RSA.Verify(signature, testHash, IncPK) {
+		fmt.Println("yolo191919")
 		return true
 	} else {
+		fmt.Println("yolo11234")
 		return false
 	}
 }
@@ -498,7 +557,7 @@ func stringToBigInt(s string) *big.Int {
 	n := new(big.Int)
 	n, ok := n.SetString(s, 10)
 	if !ok {
-			fmt.Println("error")
+			fmt.Println("error1")
 			return n
 	}
 	return n
@@ -521,6 +580,8 @@ func main() {
 	
 	// addPK to localledger
 	ledger.Accounts[PkString] = 1000
+
+	ledger.Phase = 1 // sets the phase to stage one
 
 	// stores the broadcasts and is true if used
 	isBroadcasted = make(map[string]bool)
@@ -552,21 +613,63 @@ func main() {
 
 	// foreloop that keeps the system going
 	for {
-		if(isDesignatedSequencer){
-			ledger.Phase = 1 // sets the phase to stage one
-			time.Sleep(20000 *time.Millisecond) // gives the peers 20 seconds to connect to the network
-			ledger.Phase = 2 // sets the phase to stage two
-			localMsg.Ledger = ledger // updates the ledger in the localMessage 
-			for _, conn := range connections{
-				go send(localMsg, conn) // tells all its connections that it now stage two
-			}
-		}
 		if(ledger.Phase == 2) {
-			fmt.Println("phase 2 is now initiated")
-			requestTransaction()
+			fmt.Println("-----------PHASE-2-PROCEEDED-----------")
+			if(!isDesignatedSequencer) {
+				requestTransaction()
+				//makeFakeTransaction()
+			}
 			if(isDesignatedSequencer){
-				go updateBlock()
+				updateBlock() // sets the phase to stage two
 			}
 		}
 	}
+}
+
+
+// only used when testing 2 different peers sending a transaction at the same time
+func makeFakeTransaction() {
+	time.Sleep(5000 *time.Millisecond)
+	for i := 1; i < 100; i++ {
+	t1 := makeTransaction()
+	t2 := makeTransaction()
+
+	var localMap = make(map[int]string)
+	var i = 0
+
+	for key, _ := range ledger.Accounts {
+		localMap[i]	= key
+		i++
+	}
+
+	t1.From = PkString
+	t1.To = localMap[0]
+	t1.Amount = i
+	t1.Id = myIp + t1.From + t1.To
+
+	toSign1 := t1.From + t1.To + strconv.Itoa(t1.Amount)
+
+	bigIntSign1 := RSA.Sign([]byte(toSign1))
+
+	bigSignString1 := convertBigIntToString(bigIntSign1)
+
+	t1.Signature = bigSignString1
+
+	t2.From = PkString
+	t2.To = localMap[1]
+	t2.Amount = i+2
+	t2.Id = myIp + t2.From + t2.To
+
+	toSign2 := t2.From + t2.To + strconv.Itoa(t2.Amount)
+
+	bigIntSign2 := RSA.Sign([]byte(toSign2))
+
+	bigSignString2 := convertBigIntToString(bigIntSign2)
+
+	t2.Signature = bigSignString2
+
+	go handleTransaction(t1)
+	go handleTransaction(t2)
+	time.Sleep(1000 *time.Millisecond)
+}
 }
