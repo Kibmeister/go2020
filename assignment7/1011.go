@@ -118,6 +118,11 @@ func Generate(filename string, password string) string {
 	pk = n.String() + ", " + e.String() // gathers pk in a single string
 	sk = d.String()
 
+	for i := 0; i<1000000; i++ {
+		pw := Hash([]byte(password))
+		password = string(pw)
+	}
+
 	slice := make([]byte, 16) // the secretkey has to have a blocklength of 16, because of iv
 	copy(slice, password)
 	plaintext := []byte(sk)
@@ -192,6 +197,11 @@ func stringToBigInt(s string) *big.Int {
 
 func decryptFromFile(key string, file string) string {
 	// read ciphertext from file --> decrypt --> output plaintext
+
+	for i := 0; i<1000000; i++ {
+		pw := Hash([]byte(key))
+		key = string(pw)
+	}
 	
 	slice := make([]byte, 16)
 	copy(slice, key)
@@ -233,6 +243,6 @@ func main() {
 	//encryptToFile("hello", cipher, encrypted)
 	//decryptFromFile("hello", encrypted)
 	Generate("filename", "password")
-	Sign("filename", "pasword", []byte("hello you"))
+	Sign("filename", "password", []byte("hello you"))
 	//fmt.Println(time.Since(start))
 }
