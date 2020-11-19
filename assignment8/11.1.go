@@ -34,7 +34,8 @@ type Ledger struct {
 
 type Block struct {
 	BlockNr int
-	IDlist map[string]int
+	IDlist map[int]string
+	Transactions []*Transaction
 	Signature string
 }
 
@@ -80,6 +81,11 @@ var tempOrder int = 0
 
 var LocalBlockNumber int = 0
 
+// THIS A NEW FEATURE
+var BlocksRecieved map[int]*Block
+
+var blockUpdated bool = false
+
 func makeMessage() *Message {
 	Message := new(Message)
 	return Message
@@ -99,29 +105,29 @@ func makeTransaction() *Transaction {
 func send(msg *Message, conn net.Conn) {
 	enc := gob.NewEncoder(conn) // encodes connection
 	enc.Encode(msg) // encodes and sends array
-	return 
 }
 
+// THIS IS REDACTED
 func updateBlock() {
 	time.Sleep(10000 *time.Millisecond)
 	fmt.Println("Block is now updated")
 	var update = makeMessage()
-	var sss = strconv.Itoa(LocalBlockNumber)
+	var sss = strconv.Itoa(LocalBlockNumber) + ledger.NewBlock.IDlist[0]
 	var s = RSA.Sign([]byte(sss))
 	var ss = convertBigIntToString(s)
+	ledger.NewBlock.BlockNr = LocalBlockNumber
 	ledger.NewBlock.Signature = ss
 	update.Ledger = ledger
 	fmt.Println("This is the ledger: ", update.Ledger.NewBlock.IDlist)
-	fmt.Println(ledger.NewBlock.Signature, "this is s")
+	fmt.Println(update.Ledger.NewBlock.Signature, "this is s")
+	fmt.Println(ledger.NewBlock.BlockNr, "this is the block to be send")
 	for _, conn := range connections{
 		fmt.Println("send to peers")
 		go send(update, conn)
 	}
-	LocalBlockNumber++
-	ledger.NewBlock = new(Block)
-	ledger.NewBlock.IDlist = make(map[string]int)
-	ledger.NewBlock.BlockNr = LocalBlockNumber
+	ledger.NewBlock.IDlist = make(map[int]string)
 	tempOrder = 0
+	LocalBlockNumber++
 }
 
 func handleConnection(conn net.Conn) {
@@ -152,28 +158,45 @@ func handleConnection(conn net.Conn) {
 				SequencerKeyPair = sortKeyPair(ledger.Sequencer)
 				fmt.Println("Sequencer found...")
 				}
+					// This part forward the sequencer, if someone in the network is uninformed
+				if(!informed) { 
+					sMessage := &Message{}
+					/*sMessage.Ledger = ledger
+					sMessage.Ledger.Phase = ledger.Phase// if the peer is informed about the squencer, it will not send the sequencer again
+					sMessage.Ledger.Sequencer = ""*/
+					sMessage.Ledger = ledger
+					informed = true
+					go send(sMessage, conn)
+				}
 			}
 			// In phase 2 it will first check that the sequencer has informed this, and then it will read whether the 
 			// there is a signed block or not
-			if( message.Ledger.Phase == 2 ) {
+			// THIS IS A NEW FEATURE
+			if ( message.Ledger.Phase == 2 ) {
 				ledger.Phase = 2 // updates the local ledger with the new phase
-				LocalBlockNumber = message.Ledger.NewBlock.BlockNr // if the message contains a block number, this will be added
-				if(message.Ledger.NewBlock.Signature != "") { // if the signature is not empty, this means that there a signed transactions
-					if(verifyBlock(message)) { // if the block can be verified, it will execute alle the transactions
-						executeAllNewTransactions(message)
+				// // if the message contains a block number, this will be added
+				if !isDesignatedSequencer {
+				fmt.Println("localBlock:", LocalBlockNumber)
+				fmt.Println("Block:", message.Ledger.NewBlock.BlockNr )
+				fmt.Println("Signature", message.Ledger.NewBlock.Signature )
+				if ( BlocksRecieved[message.Ledger.NewBlock.BlockNr] == nil && message.Ledger.NewBlock.Signature != "" ) { // if the signature is not empty, this means that there a signed transactions
+					fmt.Println("this far")
+					LocalBlockNumber = message.Ledger.NewBlock.BlockNr
+					BlocksRecieved[LocalBlockNumber] = message.Ledger.NewBlock // if the block can be verified, it will execute alle the transactions
+					for i := 0; i<LocalBlockNumber; i++ {
+						fmt.Println("this far2")
+						if(BlocksRecieved[i] == nil ) {
+							fmt.Println("Blocks out of sync, cannot execute before others have been recieved")
+							return 
+						} else if verifyBlock(BlocksRecieved[i]) {
+								executeAllNewTransactions(BlocksRecieved[i])
+						}
 					}
+				} else {
+					fmt.Println("blockNumber is out of order. Block rejected")
 				}
 			}
-			
-			// This part forward the sequencer, if someone in the network is uninformed
-			if(!informed) { 
-				sMessage := &Message{}
-				sMessage.Ledger = ledger
-				sMessage.Ledger.Phase = ledger.Phase// if the peer is informed about the squencer, it will not send the sequencer again
-				sMessage.Ledger.Sequencer = ""
-				informed = true
-				go send(sMessage, conn)
-			} 
+			}
 		}
 	
 
@@ -277,27 +300,18 @@ func executeTransaction(t *Transaction) {
 	}
 }
 
-func executeAllNewTransactions(m *Message ) {
-	mList := m.Ledger.NewBlock.IDlist
+// THIS IS NEW FEATURE 
+func executeAllNewTransactions(m *Block ) {
+	fmt.Println("blocks has been recieved")
 	tempIDList := make([]string,100)
-	for _, element1 := range ledger.Transactions {
-		tempIDList = append(tempIDList, element1.Id)
+	for i := 0; i<len(m.Transactions); i++ {
+		tempIDList = append(tempIDList, m.IDlist[i])
 	}
-	for key, _ := range mList {
-		exists, _ := findString(tempIDList, key)
+	for _, key := range ledger.Transactions {
+		exists, _ := findString(tempIDList, key.Id)
 		fmt.Println("this key might exist", key)
 		if( exists ){
-			findTransactionAndExecute(ledger.Transactions, key)
-		}
-	} 
-}
-
-func findTransactionAndExecute( list []*Transaction, p string) {
-	fmt.Println("yolo12")
-	for _, l := range list {
-		if l.Id == p {
-			fmt.Println("yolo121234")
-			executeTransaction(l)
+			executeTransaction(key)
 		}
 	}
 }
@@ -397,7 +411,7 @@ func initateSequencer() {
 	ledger.Sequencer = n1 + "," + e1
 	fmt.Println("hello")
 	ledger.NewBlock = new(Block)
-	ledger.NewBlock.IDlist = make(map[string]int)
+	ledger.NewBlock.IDlist = make(map[int]string)
 	ledger.NewBlock.BlockNr = LocalBlockNumber
 	time.Sleep(20000 *time.Millisecond) // gives the peers 20 seconds to connect to the network
 	ledger.Phase = 2
@@ -499,7 +513,8 @@ func verifyTransaction(inc *Transaction) {
 	if verifySignature(inc) {
 		if(isDesignatedSequencer) {
 			fmt.Println(inc.Id)
-			ledger.NewBlock.IDlist[inc.Id] = tempOrder
+			ledger.NewBlock.IDlist[tempOrder] = inc.Id
+			ledger.NewBlock.Transactions = append(ledger.NewBlock.Transactions, inc)
 			tempOrder++
 		}
 		ledger.Transactions = append(ledger.Transactions, inc)
@@ -532,16 +547,19 @@ func verifySignature(user *Transaction) bool {
 	}
 }
 
-func verifyBlock( m *Message ) bool {
-	var s = strconv.Itoa(LocalBlockNumber)
-	var sig = m.Ledger.NewBlock.Signature
+// THIS IS A NEW FEATURE
+func verifyBlock( b *Block ) bool {
+	fmt.Println("this far222")
+	var sig = b.Signature
 	var sigInt = stringToBigInt(sig)
-	testHash := RSA.Hash([]byte(s))
-	if(RSA.Verify(sigInt, testHash, SequencerKeyPair )) {
-		return true
-	} else {
-		return false
+	for _, key := range b.Transactions {
+		var s = strconv.Itoa(LocalBlockNumber) + key.Id
+		testHash := RSA.Hash([]byte(s)) 
+		if(RSA.Verify(sigInt, testHash, SequencerKeyPair )) {
+			return true
+		} 
 	}
+	return false
 }
 
 func convertBigIntToString(b *big.Int) string {
@@ -588,6 +606,8 @@ func main() {
 
 	// stores the transactions and is true if used
 	transactionIsUsed = make(map[string]bool)
+
+	BlocksRecieved = make(map[int]*Block)
 
 	// starting reader on terminal
 	reader := bufio.NewReader(os.Stdin)
