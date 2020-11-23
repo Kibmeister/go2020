@@ -28,6 +28,16 @@ type Ledger struct {
 	Accounts map[string]int
 	Connections [] string
 	Transactions[] *Transaction
+	Sequencer string
+	Phase int
+	NewBlock *Block
+}
+
+type Block struct {
+	BlockNr int
+	IDlist map[int]string
+	Transactions []*Transaction
+	Signature string
 }
 
 type Transaction struct {
@@ -72,6 +82,10 @@ var secretKeyList[] string
 
 var initialSeed string
 
+var LocalBlockNumber int = 0
+
+var tempOrder int = 0
+
 func makeMessage() *Message {
 	Message := new(Message)
 	return Message
@@ -93,7 +107,7 @@ func send(msg *Message, conn net.Conn) {
 	enc.Encode(msg) // encodes and sends array
 }
 
-// generates 10 peers with the 
+// generates 10 peers with the // https://yourbasic.org/golang/generate-random-string/ used for generating string
 func initateGenesisBlock() {
 	rand.Seed(time.Now().UnixNano())
 	characters := []rune("abcdefghijklmnopqrstuvwxyzåäöABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ0123456789")
@@ -116,6 +130,28 @@ func initateGenesisBlock() {
 		secretKeyList = append(secretKeyList, convertBigIntToString(RSA.GetSecretKey()))
 		Genesis.Accounts[pkToString] = 1000000
 	}
+}
+
+func updateBlock() {
+	time.Sleep(10000 *time.Millisecond)
+	fmt.Println("Block is now updated")
+	var update = makeMessage()
+	var sss = strconv.Itoa(LocalBlockNumber) + ledger.NewBlock.IDlist[0]
+	var s = RSA.Sign([]byte(sss))
+	var ss = convertBigIntToString(s)
+	ledger.NewBlock.BlockNr = LocalBlockNumber
+	ledger.NewBlock.Signature = ss
+	update.Ledger = ledger
+	fmt.Println("This is the ledger: ", update.Ledger.NewBlock.IDlist)
+	fmt.Println(update.Ledger.NewBlock.Signature, "this is s")
+	fmt.Println(ledger.NewBlock.BlockNr, "this is the block to be send")
+	for _, conn := range connections{
+		fmt.Println("send to peers")
+		go send(update, conn)
+	}
+	ledger.NewBlock.IDlist = make(map[int]string)
+	tempOrder = 0
+	LocalBlockNumber++
 }
 
 func handleConnection(conn net.Conn) {
