@@ -171,8 +171,8 @@ func decryptFromFile(key string, file string) {
 
 func main() {
 	start := time.Now()
-	KeyGen(1024)
-	Sign([]byte("message"))
+	//KeyGen(1024)
+	//Sign([]byte("message"))
 	//Verify()
 	// encrypt(big.NewInt(77), e, n)
 	// decrypt(encrypted, d, n)

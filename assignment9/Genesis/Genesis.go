@@ -13,6 +13,7 @@ import (
 )
 
 func initateGenesisBlock() {
+	var list1 = new([]string)
 	for i := 0; i<10; i++ {
 		RSA.KeyGen(1024)
 	}
